@@ -13,10 +13,9 @@ class ScreenCapture:
         if region is None:
             monitor = self._backend.primary_monitor
         else:
-            left, top, width, height = region
+            self.validation_region(region)
 
-            if width <= 0 or height <= 0:
-                raise ValueError("Width and height must be greater than zero")
+            left, top, width, height = region
 
             monitor = {"left": left, "top": top, "width": width, "height": height}
 
@@ -26,6 +25,28 @@ class ScreenCapture:
         image = raw[:, :, :3].copy()
 
         return image
+
+    def validation_region(self,region:Region) -> None:
+        left, top, width, height = region
+
+        if width <= 0 or height <= 0:
+            raise ValueError("Width and height must be greater than zero")
+
+        monitor = self._backend.primary_monitor
+
+        screen_left = monitor["left"]
+        screen_top = monitor["top"]
+        screen_right = screen_left + monitor["width"]
+        screen_bottom = screen_top + monitor["height"]
+
+        region_right = left + width
+        region_bottom = top + height
+
+        if left < screen_left or top < screen_top or region_right > screen_right or region_bottom > screen_bottom:
+            raise ValueError("Region must be within the screen")
+
+
+
 
     def close(self) -> None:
         self._backend.close()
