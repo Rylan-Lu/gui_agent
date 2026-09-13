@@ -1,4 +1,5 @@
 from typing import TypeAlias, Literal
+from gui_agent.control.windows_text import type_unicode_text
 
 import pyautogui
 
@@ -51,10 +52,11 @@ class Controller:
         if interval < 0:
             raise ValueError("interval must be a non-negative number")
 
-        if not text.isascii():
-            raise ControlError("text must be ASCII")
+        if text.isascii():
+            pyautogui.write(text, interval=interval)
+            return
 
-        pyautogui.typewrite(text, interval=interval)
+        type_unicode_text(text)
 
     def press(self, key: str, *, presses: int = 1, interval: float = 0.0) -> None:
         if presses <= 0:
