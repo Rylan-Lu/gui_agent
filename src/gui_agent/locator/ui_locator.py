@@ -27,6 +27,16 @@ def normalize_text(text: str) -> str:
 
     normalized = " ".join(normalized.split())
 
+    quote_pairs = {
+        ("“", "”"),
+        ("‘", "’"),
+        ('"', '"'),
+        ("'", "'"),
+    }
+
+    while len(normalized)>=2 and (normalized[0], normalized[1]) in quote_pairs:
+        normalized = normalized[1:-1].strip()
+
     return normalized
 
 class UILocator:
