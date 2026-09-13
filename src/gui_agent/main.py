@@ -1,43 +1,12 @@
-from gui_agent.locator.ui_locator import (
-    AmbiguousTargetError,
-    TargetNotFoundError,
-    UILocator,
-)
-from gui_agent.ocr.easyocr_engine import EasyOCR_ENGINE
+from gui_agent.locator.coordinate_mapper import CoordinateMapper
 from gui_agent.perception.screen_capture import ScreenCapture
 
+region = (500, 300, 800, 600)
 
-def main() -> None:
-    with ScreenCapture() as capture:
-        image = capture.capture()
+with ScreenCapture() as capture:
+    frame = capture.capture(region)
 
-    engine = EasyOCR_ENGINE()
-    results = engine.recognize(image)
+print("Frame shape:", frame.image.shape)
+print("Image size:", frame.image_size)
+print("Desktop region:", frame.region)
 
-    locator = UILocator()
-
-    try:
-        target = locator.find_one(
-            results,
-            "lasdjasldjasldjasld",
-        )
-
-        print(f"Found: {target.result.text}")
-        print(
-            f"Confidence: "
-            f"{target.result.confidence:.3f}"
-        )
-        print(
-            f"Image center: "
-            f"{target.image_center}"
-        )
-
-    except TargetNotFoundError as exc:
-        print(exc)
-
-    except AmbiguousTargetError as exc:
-        print(exc)
-
-
-if __name__ == "__main__":
-    main()
