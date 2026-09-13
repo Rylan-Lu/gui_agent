@@ -20,6 +20,10 @@ class LocatedElement:
     image_center: tuple[float, float]
     match_score: float
 
+    @property
+    def image_bbox(self):
+        return self.result.bbox
+
 def normalize_text(text: str) -> str:
     normalized = unicodedata.normalize("NFKC", text)
 
