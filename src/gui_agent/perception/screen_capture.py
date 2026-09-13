@@ -1,17 +1,30 @@
 from typing import TypeAlias
+from dataclasses import dataclass
 
 from mss import MSS
 import numpy as np
 
 Region: TypeAlias = tuple[int, int, int, int]
+ImageSize: TypeAlias = tuple[int, int]
+
+@dataclass(slots=True)
+class CapturedFrame:
+    image: np.ndarray
+    region: Region
+
+    @property
+    def image_size(self) -> ImageSize:
+        height, width = self.image.shape[:2]
+        return width, height
 
 class ScreenCapture:
     def __init__(self) -> None:
         self._backend = MSS()
 
-    def capture(self, region: Region | None=None) -> np.ndarray:
+    def capture(self, region: Region | None=None) -> CapturedFrame:
         if region is None:
             monitor = self._backend.primary_monitor
+            actual_region: Region = monitor["left"], monitor["top"], monitor["width"], monitor["height"]
         else:
             self.validation_region(region)
 
@@ -19,12 +32,14 @@ class ScreenCapture:
 
             monitor = {"left": left, "top": top, "width": width, "height": height}
 
+            actual_region = region
+
         screenshot = self._backend.grab(monitor)
 
         raw = np.asarray(screenshot)
         image = raw[:, :, :3].copy()
 
-        return image
+        return CapturedFrame(image, actual_region)
 
     def validation_region(self,region:Region) -> None:
         left, top, width, height = region
