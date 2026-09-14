@@ -16,25 +16,17 @@ class OCRVisualizer:
         self.min_confidence = min_confidence
 
         font_path = Path(r"C:\Windows\Fonts\msyh.ttc")
-
-        self._font = ImageFont.truetype(
-            str(font_path),
-            font_size,
-        )
+        if font_path.exists():
+            self._font = ImageFont.truetype(str(font_path), font_size)
+        else:
+            self._font = ImageFont.load_default()
 
     def draw(
         self,
         image: np.ndarray,
         results: list[OCRResult],
     ) -> np.ndarray:
-        annotated = image.copy()
-
-        # OpenCV BGR -> Pillow RGB
-        rgb_image = cv2.cvtColor(
-            annotated,
-            cv2.COLOR_BGR2RGB,
-        )
-
+        rgb_image = cv2.cvtColor(image.copy(), cv2.COLOR_BGR2RGB)
         pil_image = Image.fromarray(rgb_image)
         draw = ImageDraw.Draw(pil_image)
 
@@ -42,11 +34,7 @@ class OCRVisualizer:
             if result.confidence < self.min_confidence:
                 continue
 
-            points = [
-                (int(x), int(y))
-                for x, y in result.bbox
-            ]
-
+            points = [(int(x), int(y)) for x, y in result.bbox]
             draw.line(
                 points + [points[0]],
                 fill=(0, 255, 0),
@@ -54,25 +42,15 @@ class OCRVisualizer:
             )
 
             x, y = points[0]
-
-            label = (
-                f"{result.text} "
-                f"({result.confidence:.2f})"
-            )
-
-            text_y = max(y - 22, 0)
-
+            label = f"{result.text} ({result.confidence:.2f})"
             draw.text(
-                (x, text_y),
+                (x, max(y - 22, 0)),
                 label,
                 font=self._font,
                 fill=(0, 255, 0),
             )
 
-        # Pillow RGB -> OpenCV BGR
-        result_image = cv2.cvtColor(
+        return cv2.cvtColor(
             np.asarray(pil_image),
             cv2.COLOR_RGB2BGR,
         )
-
-        return result_image

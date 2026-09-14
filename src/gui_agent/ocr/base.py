@@ -5,14 +5,15 @@ from typing import TypeAlias
 import numpy as np
 
 Point: TypeAlias = tuple[float, float]
-
 BoundingBox: TypeAlias = tuple[Point, Point, Point, Point]
+
 
 @dataclass(frozen=True)
 class OCRResult:
     text: str
     confidence: float
     bbox: BoundingBox
+
 
 class OCREngine(ABC):
     @abstractmethod
