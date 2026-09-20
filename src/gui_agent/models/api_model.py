@@ -136,6 +136,11 @@ class APIModelClient:
             text = choice["message"]["content"]
             model_name = data.get("model") or self.model_id
 
+            if not isinstance(text, str) or not text.strip():
+                raise RuntimeError(
+                    "Invalid API response content"
+                )
+
         except (KeyError, IndexError, TypeError) as exc:
             raise RuntimeError(
                 "Invalid API response structure"
