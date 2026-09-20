@@ -34,3 +34,6 @@ scripts/outputs/
 # Temporary files
 *.tmp
 *.temp
+
+# Generated datasets
+data/
