@@ -66,11 +66,10 @@ class Controller:
         if interval < 0:
             raise ValueError("interval must be a non-negative number")
 
-        if text.isascii():
-            pyautogui.write(text, interval=interval)
-            return
-
-        type_unicode_text(text)
+        type_unicode_text(
+            text,
+            interval=interval,
+        )
 
     def press(
         self,

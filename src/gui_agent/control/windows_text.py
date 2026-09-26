@@ -1,4 +1,5 @@
 import ctypes
+import time
 from ctypes import wintypes
 
 
@@ -139,16 +140,27 @@ def _send_utf16_unit(code_unit: int) -> None:
         )
 
 
-def type_unicode_text(text: str) -> None:
+def type_unicode_text(
+    text: str,
+    *,
+    interval: float = 0.0,
+) -> None:
     if not isinstance(text, str):
         raise TypeError("text must be a string.")
 
-    encoded = text.encode("utf-16-le")
+    if interval < 0:
+        raise ValueError("interval must be non-negative")
 
-    for index in range(0, len(encoded), 2):
-        code_unit = int.from_bytes(
-            encoded[index:index + 2],
-            byteorder="little",
-        )
+    for char in text:
+        encoded = char.encode("utf-16-le")
 
-        _send_utf16_unit(code_unit)
+        for index in range(0, len(encoded), 2):
+            code_unit = int.from_bytes(
+                encoded[index:index + 2],
+                byteorder="little",
+            )
+
+            _send_utf16_unit(code_unit)
+
+        if interval > 0:
+            time.sleep(interval)

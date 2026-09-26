@@ -4,30 +4,56 @@ import json
 
 from dataclasses import dataclass
 from typing import Any
+from gui_agent.datasets.schema import ActionType, GUIAction
 
 
 @dataclass(frozen=True)
 class PlanStep:
-    """One high-level step in a task plan."""
-
     step_id: int
     description: str
+    action: GUIAction | None = None
 
     def __post_init__(self) -> None:
-
         if type(self.step_id) is not int or self.step_id < 1:
-            raise ValueError(
-                "step_id must be a positive integer"
-            )
+            raise ValueError("step_id must be a positive integer")
 
         if (
             not isinstance(self.description, str)
             or not self.description.strip()
         ):
-            raise ValueError(
-                "description must not be empty"
-            )
+            raise ValueError("description must not be empty")
 
+def _parse_gui_action(data: Any) -> GUIAction | None:
+    if data is None:
+        return None
+
+    if not isinstance(data, dict):
+        raise ValueError("action must be an object")
+
+    raw_type = data.get("action_type")
+
+    try:
+        action_type = ActionType(raw_type)
+    except (ValueError, TypeError):
+        raise ValueError(f"invalid action_type: {raw_type}")
+
+    raw_keys = data.get("keys", ())
+
+    if not isinstance(raw_keys, (list, tuple)):
+        raise ValueError("keys must be a list")
+
+    if not all(isinstance(key, str) for key in raw_keys):
+        raise ValueError("keys must contain strings")
+
+    return GUIAction(
+        action_type=action_type,
+        mouse_button=data.get("mouse_button"),
+        scroll_delta=data.get("scroll_delta"),
+        text=data.get("text"),
+        keys=tuple(raw_keys),
+        element=data.get("element"),
+        wait_seconds=data.get("wait_seconds"),
+    )
 
 @dataclass(frozen=True)
 class TaskPlan:
@@ -86,6 +112,9 @@ class TaskPlan:
                 PlanStep(
                     step_id=item.get("step_id"),
                     description=item.get("description"),
+                    action=_parse_gui_action(
+                        item.get("action")
+                    ),
                 )
             )
 
