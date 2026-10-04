@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -11,46 +13,44 @@ from gui_agent.agent.loop import AgentLoop
 from gui_agent.agent.plan_schema import TaskPlan
 from gui_agent.agent.runtime import AgentRuntime
 from gui_agent.agent.success_judge import (
+    SuccessJudgeResult,
     TextAbsentJudge,
     TextSuccessJudge,
 )
 from gui_agent.control.controller import Controller
 from gui_agent.ocr.paddleocr_engine import PaddleOCREngine
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
+E2E_ARTIFACT_DIR = ROOT / "artifacts" / "e2e" / "week4"
 
 BROWSER_MARKER = "WEEK4_BROWSER_OPEN_PASS"
-
-BROWSER_FILE = (
-    ROOT
-    / "data"
-    / "week4_browser_test.html"
-)
-
-BROWSER_FILE.write_text(
-    f"""
-    <html>
-    <body>
-        <h1>{BROWSER_MARKER}</h1>
-    </body>
-    </html>
-    """,
-    encoding="utf-8",
-)
-
-TEST_FILE = ROOT / "data" / "week4_test_file.txt"
-TEST_FILE.parent.mkdir(
-    parents=True,
-    exist_ok=True,
-)
-
 FILE_MARKER = "WEEK4_FILE_OPEN_PASS"
-TEXT_MARKER = f"W4TXT_{int(time.time())}"
 
-TEST_FILE.write_text(
-    FILE_MARKER,
-    encoding="utf-8",
-)
+BROWSER_FILE = E2E_ARTIFACT_DIR / "week4_browser_test.html"
+TEST_FILE = E2E_ARTIFACT_DIR / "week4_test_file.txt"
+TARGET_APP = ROOT / "scripts" / "e2e" / "e2e_target_app.py"
+
+
+def prepare_test_artifacts() -> None:
+    """Create temporary files used by the real desktop task suite."""
+
+    E2E_ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
+
+    BROWSER_FILE.write_text(
+        f"""
+        <html>
+        <body>
+            <h1>{BROWSER_MARKER}</h1>
+        </body>
+        </html>
+        """,
+        encoding="utf-8",
+    )
+
+    TEST_FILE.write_text(
+        FILE_MARKER,
+        encoding="utf-8",
+    )
 
 
 def build_plan(steps):
@@ -71,6 +71,13 @@ def build_plan(steps):
 
 
 def main():
+    prepare_test_artifacts()
+    message_marker = f"W4MSG_{int(time.time())}"
+    message_receipt = E2E_ARTIFACT_DIR / "message_receipt.txt"
+
+    if message_receipt.exists():
+        message_receipt.unlink()
+
     ocr = PaddleOCREngine(
         lang="ch",
         device="gpu:0",
@@ -95,6 +102,7 @@ def main():
     absent_judge = TextAbsentJudge()
 
     results = []
+    message_process: subprocess.Popen[bytes] | None = None
 
     def run_task(
             name,
@@ -291,54 +299,123 @@ def main():
             ),
         )
 
-        # 4. 文本操作
+        # 4. 发送消息
+        # Launch a deterministic local target instead of depending on a
+        # third-party messaging client, account, network, or changing UI.
+        message_process = subprocess.Popen(
+            [
+                sys.executable,
+                str(TARGET_APP),
+                "--receipt",
+                str(message_receipt.resolve()),
+            ],
+        )
+        time.sleep(1.5)
+
+        def sent_check() -> SuccessJudgeResult:
+            observation = environment.observe(use_ocr=True)
+            visual_result = text_judge.judge(
+                observation,
+                "MESSAGE SENT",
+            )
+
+            if not visual_result.success:
+                return visual_result
+
+            if not message_receipt.exists():
+                return SuccessJudgeResult(
+                    success=False,
+                    reason="message receipt was not created",
+                )
+
+            received = message_receipt.read_text(
+                encoding="utf-8"
+            ).strip()
+
+            if received != message_marker:
+                return SuccessJudgeResult(
+                    success=False,
+                    reason=(
+                        "message receipt mismatch: "
+                        f"expected {message_marker!r}, got {received!r}"
+                    ),
+                )
+
+            return SuccessJudgeResult(
+                success=True,
+                reason=(
+                    "message target displayed sent state and "
+                    "receipt matched"
+                ),
+                matched_text=visual_result.matched_text,
+            )
+
         run_task(
-            "04 Text Operation",
+            "04 Send Message",
             build_plan(
                 [
                     {
-                        "description": "Select text",
+                        "description": "Focus message input",
                         "action": {
-                            "action_type": "hotkey",
-                            "keys": ["ctrl", "a"],
+                            "action_type": "click",
+                            "element": "E2E_TARGET",
                         },
                     },
                     {
-                        "description": "Replace text",
+                        "description": "Type message",
                         "action": {
                             "action_type": "type_text",
-                            "text": TEXT_MARKER,
+                            "text": message_marker,
                         },
                     },
                     {
-                        "description": "Save file",
+                        "description": "Send message",
                         "action": {
-                            "action_type": "hotkey",
-                            "keys": ["ctrl", "s"],
+                            "action_type": "click",
+                            "element": "SEND",
                         },
                     },
                     {
-                        "description": "Wait",
+                        "description": "Wait for sent status",
                         "action": {
                             "action_type": "wait",
-                            "wait_seconds": 1.0,
+                            "wait_seconds": 0.8,
                         },
                     },
                 ]
             ),
-            lambda: text_judge.judge(
-                environment.observe(use_ocr=True),
-                TEXT_MARKER,
-            ),
+            sent_check,
+            max_steps=8,
         )
 
         # 5. 关闭应用
+        def closed_check() -> SuccessJudgeResult:
+            observation = environment.observe(use_ocr=True)
+            absent_result = absent_judge.judge(
+                observation,
+                "MESSAGE SENT",
+            )
+
+            if message_process is not None and message_process.poll() is None:
+                return SuccessJudgeResult(
+                    success=False,
+                    reason="message target process is still running",
+                )
+
+            if not absent_result.success:
+                return absent_result
+
+            return SuccessJudgeResult(
+                success=True,
+                reason="message target closed and sent marker is absent",
+            )
+
         run_task(
             "05 Close Application",
             build_plan(
                 [
                     {
-                        "description": "Close Notepad",
+                        "description": "Close message target",
                         "action": {
                             "action_type": "hotkey",
                             "keys": ["alt", "f4"],
@@ -353,13 +430,19 @@ def main():
                     },
                 ]
             ),
-            lambda: absent_judge.judge(
-                environment.observe(use_ocr=True),
-                TEXT_MARKER,
-            ),
+            closed_check,
         )
 
     finally:
+        if message_process is not None and message_process.poll() is None:
+            message_process.terminate()
+
+            try:
+                message_process.wait(timeout=3.0)
+            except subprocess.TimeoutExpired:
+                message_process.kill()
+                message_process.wait(timeout=3.0)
+
         environment.close()
 
     print("\n=== Week 4 Task Suite ===")
