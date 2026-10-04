@@ -100,6 +100,10 @@ class GUIAction:
 class GUIExample:
     """
     Unified representation of one GUI dataset sample / trajectory step.
+
+    GUIAction intentionally remains a broad transport representation.
+    GUIExample validates the common dataset-record boundary.
+    Dataset-specific validation belongs in the corresponding adapter.
     """
 
     source: str
@@ -115,14 +119,31 @@ class GUIExample:
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if not self.source.strip():
-            raise ValueError("source must not be empty")
+        for field_name in (
+            "source",
+            "task_id",
+            "instruction",
+        ):
+            value = getattr(
+                self,
+                field_name,
+            )
 
-        if not self.task_id.strip():
-            raise ValueError("task_id must not be empty")
+            if (
+                not isinstance(value, str)
+                or not value.strip()
+            ):
+                raise ValueError(
+                    f"{field_name} must be a non-empty string"
+                )
 
-        if not self.instruction.strip():
-            raise ValueError("instruction must not be empty")
+        # bool is an int subclass, so exact type checking is intentional.
+        if type(self.step_index) is not int:
+            raise ValueError(
+                "step_index must be an integer"
+            )
 
         if self.step_index < 0:
-            raise ValueError("step_index must be >= 0")
+            raise ValueError(
+                "step_index must be >= 0"
+            )

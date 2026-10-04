@@ -10,7 +10,10 @@ from gui_agent.datasets.schema import (
 
 
 def test_point_creation():
-    point = Point(x=100, y=200)
+    point = Point(
+        x=100,
+        y=200,
+    )
 
     assert point.x == 100
     assert point.y == 200
@@ -18,103 +21,228 @@ def test_point_creation():
 
 def test_click_action():
     action = GUIAction(
-        action_type=ActionType.CLICK,
-        position=Point(100, 200),
+        action_type=(
+            ActionType.CLICK
+        ),
+        position=Point(
+            100,
+            200,
+        ),
     )
 
-    assert action.action_type == ActionType.CLICK
-    assert action.position == Point(100, 200)
+    assert (
+        action.action_type
+        == ActionType.CLICK
+    )
+
+    assert (
+        action.position
+        == Point(
+            100,
+            200,
+        )
+    )
 
 
 def test_type_text_action():
     action = GUIAction(
-        action_type=ActionType.TYPE_TEXT,
+        action_type=(
+            ActionType.TYPE_TEXT
+        ),
         text="GUI Agent",
     )
 
-    assert action.text == "GUI Agent"
+    assert (
+        action.text
+        == "GUI Agent"
+    )
 
 
 def test_normalized_coordinate_space():
     action = GUIAction(
-        action_type=ActionType.CLICK,
-        position=Point(0.5, 0.25),
-        coordinate_space=CoordinateSpace.NORMALIZED,
+        action_type=(
+            ActionType.CLICK
+        ),
+        position=Point(
+            0.5,
+            0.25,
+        ),
+        coordinate_space=(
+            CoordinateSpace.NORMALIZED
+        ),
     )
 
-    assert action.coordinate_space == CoordinateSpace.NORMALIZED
+    assert (
+        action.coordinate_space
+        == CoordinateSpace.NORMALIZED
+    )
 
 
 def test_gui_example_creation():
     action = GUIAction(
-        action_type=ActionType.CLICK,
-        position=Point(500, 300),
+        action_type=(
+            ActionType.CLICK
+        ),
+        position=Point(
+            500,
+            300,
+        ),
     )
 
     example = GUIExample(
         source="screenagent",
         task_id="task_001",
-        instruction="Click the search box",
+        instruction=(
+            "Click the search box"
+        ),
         screenshot="0001.png",
         action=action,
     )
 
-    assert example.source == "screenagent"
-    assert example.task_id == "task_001"
-    assert example.step_index == 0
-    assert example.action == action
+    assert (
+        example.source
+        == "screenagent"
+    )
+
+    assert (
+        example.task_id
+        == "task_001"
+    )
+
+    assert (
+        example.step_index
+        == 0
+    )
+
+    assert (
+        example.action
+        == action
+    )
 
 
 @pytest.mark.parametrize(
     "field,value",
     [
         ("source", ""),
+        ("source", "   "),
+        ("source", None),
+        ("source", 123),
+
         ("task_id", ""),
+        ("task_id", "   "),
+        ("task_id", None),
+        ("task_id", 123),
+
         ("instruction", ""),
+        ("instruction", "   "),
+        ("instruction", None),
+        ("instruction", 123),
     ],
 )
-def test_required_text_fields_must_not_be_empty(field, value):
+def test_required_text_fields_must_be_nonempty_strings(
+    field,
+    value,
+):
     kwargs = {
         "source": "screenagent",
         "task_id": "task_001",
-        "instruction": "Click something",
+        "instruction": (
+            "Click something"
+        ),
     }
 
     kwargs[field] = value
 
-    with pytest.raises(ValueError):
-        GUIExample(**kwargs)
+    with pytest.raises(
+        ValueError,
+        match=field,
+    ):
+        GUIExample(
+            **kwargs
+        )
 
 
-def test_negative_step_index_rejected():
-    with pytest.raises(ValueError):
+@pytest.mark.parametrize(
+    "step_index",
+    [
+        True,
+        False,
+        1.5,
+        "1",
+        None,
+    ],
+)
+def test_step_index_must_be_exact_integer(
+    step_index,
+):
+    with pytest.raises(
+        ValueError,
+        match="step_index",
+    ):
         GUIExample(
             source="screenagent",
             task_id="task_001",
-            instruction="Click something",
+            instruction=(
+                "Click something"
+            ),
+            step_index=(
+                step_index
+            ),
+        )
+
+
+def test_negative_step_index_rejected():
+    with pytest.raises(
+        ValueError,
+        match="step_index",
+    ):
+        GUIExample(
+            source="screenagent",
+            task_id="task_001",
+            instruction=(
+                "Click something"
+            ),
             step_index=-1,
         )
 
 
 def test_history():
     first_action = GUIAction(
-        action_type=ActionType.CLICK,
-        position=Point(100, 200),
+        action_type=(
+            ActionType.CLICK
+        ),
+        position=Point(
+            100,
+            200,
+        ),
     )
 
     second_action = GUIAction(
-        action_type=ActionType.TYPE_TEXT,
+        action_type=(
+            ActionType.TYPE_TEXT
+        ),
         text="hello",
     )
 
     example = GUIExample(
         source="screenagent",
         task_id="task_001",
-        instruction="Search for hello",
+        instruction=(
+            "Search for hello"
+        ),
         step_index=1,
         action=second_action,
-        history=(first_action,),
+        history=(
+            first_action,
+        ),
     )
 
-    assert len(example.history) == 1
-    assert example.history[0] == first_action
+    assert (
+        len(example.history)
+        == 1
+    )
+
+    assert (
+        example.history[0]
+        == first_action
+    )
