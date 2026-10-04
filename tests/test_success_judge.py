@@ -165,3 +165,59 @@ def test_success_compact_across_results():
     )
 
     assert result.success is True
+
+def test_absent_judge_success_when_text_is_missing():
+    from gui_agent.agent.success_judge import TextAbsentJudge
+
+    observation = make_observation([make_ocr("Other text")])
+
+    result = TextAbsentJudge().judge(
+        observation,
+        "Notepad",
+    )
+
+    assert result.success is True
+    assert result.reason == "forbidden text is absent"
+
+
+def test_absent_judge_failure_when_text_is_visible():
+    from gui_agent.agent.success_judge import TextAbsentJudge
+
+    observation = make_observation([make_ocr("Notepad")])
+
+    result = TextAbsentJudge().judge(
+        observation,
+        "Notepad",
+    )
+
+    assert result.success is False
+    assert result.matched_text == "Notepad"
+
+
+def test_absent_judge_does_not_treat_missing_ocr_as_success():
+    from gui_agent.agent.success_judge import TextAbsentJudge
+
+    observation = make_observation(None)
+
+    result = TextAbsentJudge().judge(
+        observation,
+        "Notepad",
+    )
+
+    assert result.success is False
+    assert result.reason == "no OCR results available"
+
+
+def test_absent_judge_compact_normalization_detects_visible_text():
+    from gui_agent.agent.success_judge import TextAbsentJudge
+
+    observation = make_observation(
+        [make_ocr("GUI AGENT WEEK4 1790428383")]
+    )
+
+    result = TextAbsentJudge().judge(
+        observation,
+        "GUI_AGENT_WEEK4_1790428383",
+    )
+
+    assert result.success is False

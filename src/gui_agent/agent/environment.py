@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from gui_agent.agent.observation import Observation
@@ -21,22 +22,37 @@ class DesktopEnvironment:
         *,
         use_ocr: bool = False,
     ) -> Observation:
+        """
+        Capture the current desktop state.
+
+        Observation.timestamp represents the age of the captured
+        visual state, not the time at which optional OCR finishes.
+        """
+
+        # Configuration errors should fail before any screenshot work.
+        if use_ocr and self.ocr_engine is None:
+            raise RuntimeError(
+                "OCR requested but no OCR engine is configured"
+            )
+
         frame = self.screen_capture.capture(region)
+
+        # Record the timestamp immediately after the screenshot is
+        # obtained and before potentially expensive OCR inference.
+        captured_at = time.monotonic()
 
         width, height = frame.image_size
 
         ocr_result = None
 
         if use_ocr:
-            if self.ocr_engine is None:
-                raise RuntimeError(
-                    "OCR requested but no OCR engine is configured"
-                )
-
-            ocr_result = self.ocr_engine.recognize(frame.image)
+            ocr_result = self.ocr_engine.recognize(
+                frame.image
+            )
 
         return Observation(
             screenshot=frame.image,
+            timestamp=captured_at,
             screen_width=width,
             screen_height=height,
             ocr_result=ocr_result,
@@ -52,5 +68,10 @@ class DesktopEnvironment:
     def __enter__(self) -> "DesktopEnvironment":
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(
+        self,
+        exc_type,
+        exc_val,
+        exc_tb,
+    ) -> None:
         self.close()
