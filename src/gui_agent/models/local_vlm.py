@@ -6,6 +6,7 @@ from gui_agent.models.base import (
     ModelRequest,
     ModelResponse,
 )
+from gui_agent.runtime.gpu_runtime import initialize_torch_gpu_runtime
 
 
 class LocalVLMClient:
@@ -31,17 +32,15 @@ class LocalVLMClient:
         if self.model is not None:
             return
 
+        # Use the shared, validated Torch-first initialization path before
+        # loading other GPU-heavy model stacks in this process.
+        initialize_torch_gpu_runtime()
+
         import torch
         from transformers import (
             AutoProcessor,
             Qwen3VLForConditionalGeneration,
         )
-
-        if not torch.cuda.is_available():
-            raise RuntimeError("CUDA is not available")
-
-        # Initialize Torch before any future Paddle import.
-        torch.cuda.init()
 
         processor = AutoProcessor.from_pretrained(
             self.model_id,

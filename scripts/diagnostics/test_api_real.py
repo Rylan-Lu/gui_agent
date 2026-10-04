@@ -1,16 +1,19 @@
 from __future__ import annotations
 
-import argparse
-import getpass
-import os
-import tempfile
-import time
-from pathlib import Path
-
 from PIL import Image, ImageDraw, ImageFont
 
 from gui_agent.models.api_model import APIModelClient
 from gui_agent.models.base import ModelRequest
+
+import argparse
+import getpass
+import json
+import os
+import tempfile
+import time
+
+from pathlib import Path
+from urllib.error import HTTPError, URLError
 
 
 def create_test_image(path: Path) -> None:
@@ -78,7 +81,59 @@ def main() -> None:
 
         start = time.perf_counter()
 
-        response = client.generate(request)
+        try:
+            response = client.generate(request)
+
+        except HTTPError as exc:
+            elapsed = time.perf_counter() - start
+
+            raw_body = exc.read()
+
+            body = raw_body.decode(
+                "utf-8",
+                errors="replace",
+            ).strip()
+
+            print()
+            print("===== HTTP ERROR =====")
+            print("Status:", exc.code)
+            print("Reason:", exc.reason)
+            print(
+                "Elapsed:",
+                round(elapsed, 2),
+                "seconds",
+            )
+
+            if body:
+                try:
+                    parsed = json.loads(body)
+
+                    body = json.dumps(
+                        parsed,
+                        ensure_ascii=False,
+                        indent=2,
+                    )
+                except json.JSONDecodeError:
+                    pass
+
+                print("Response body:")
+                print(body[:4000])
+
+            raise SystemExit(1)
+
+        except URLError as exc:
+            elapsed = time.perf_counter() - start
+
+            print()
+            print("===== NETWORK ERROR =====")
+            print("Reason:", exc.reason)
+            print(
+                "Elapsed:",
+                round(elapsed, 2),
+                "seconds",
+            )
+
+            raise SystemExit(1)
 
         elapsed = time.perf_counter() - start
 
