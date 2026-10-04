@@ -59,6 +59,14 @@ class UILocator:
         fuzzy_threshold: float = 0.8,
         roi: ROI | None = None,
     ) -> list[LocatedElement]:
+        if mode not in ("exact", "fuzzy"):
+            raise ValueError(f"Invalid mode: {mode}")
+
+        if roi is not None:
+            _, _, width, height = roi
+            if width <= 0 or height <= 0:
+                raise ValueError("ROI width and height must be positive")
+
         if not 0.0 <= min_confidence <= 1.0:
             raise ValueError("min_confidence must be between 0.0 and 1.0")
         if not 0.0 <= fuzzy_threshold <= 1.0:

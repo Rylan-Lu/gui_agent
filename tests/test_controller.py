@@ -1,27 +1,40 @@
-import importlib
-import sys
-import types
-
 import pytest
 
+import gui_agent.control.controller as controller_module
 
-class FakePyAutoGUI(types.ModuleType):
+
+class FakePyAutoGUI:
     def __init__(self):
-        super().__init__("pyautogui")
         self.FAILSAFE = False
         self.calls = []
 
     def size(self):
-        return (2560, 1440)
+        return 2560, 1440
 
-    def moveTo(self, x, y, duration=0):
+    def moveTo(
+        self,
+        x,
+        y,
+        duration=0,
+    ):
         self.calls.append(
-            ("moveTo", x, y, duration)
+            (
+                "moveTo",
+                x,
+                y,
+                duration,
+            )
         )
 
-    def click(self, button="left"):
+    def click(
+        self,
+        button="left",
+    ):
         self.calls.append(
-            ("click", button)
+            (
+                "click",
+                button,
+            )
         )
 
     def doubleClick(
@@ -30,7 +43,11 @@ class FakePyAutoGUI(types.ModuleType):
         interval=0,
     ):
         self.calls.append(
-            ("doubleClick", button, interval)
+            (
+                "doubleClick",
+                button,
+                interval,
+            )
         )
 
     def dragTo(
@@ -48,15 +65,6 @@ class FakePyAutoGUI(types.ModuleType):
                 duration,
                 button,
             )
-        )
-
-    def write(
-        self,
-        text,
-        interval=0,
-    ):
-        self.calls.append(
-            ("write", text, interval)
         )
 
     def press(
@@ -80,78 +88,71 @@ class FakePyAutoGUI(types.ModuleType):
         interval=0,
     ):
         self.calls.append(
-            ("hotkey", keys, interval)
+            (
+                "hotkey",
+                keys,
+                interval,
+            )
         )
 
-    def scroll(self, amount):
+    def scroll(
+        self,
+        amount,
+    ):
         self.calls.append(
-            ("scroll", amount)
+            (
+                "scroll",
+                amount,
+            )
         )
 
 
-# ---------------------------------------------------------
-# Fake modules
-# ---------------------------------------------------------
+@pytest.fixture
+def control_env(monkeypatch):
+    fake_pyautogui = FakePyAutoGUI()
+    unicode_calls = []
 
-fake_pyautogui = FakePyAutoGUI()
+    def fake_type_unicode_text(
+        text,
+        *,
+        interval=0.0,
+    ):
+        unicode_calls.append(
+            (
+                text,
+                interval,
+            )
+        )
 
-fake_windows_text = types.ModuleType(
-    "gui_agent.control.windows_text"
-)
+    monkeypatch.setattr(
+        controller_module,
+        "pyautogui",
+        fake_pyautogui,
+    )
 
-fake_windows_text.calls = []
+    monkeypatch.setattr(
+        controller_module,
+        "type_unicode_text",
+        fake_type_unicode_text,
+    )
 
-
-def fake_type_unicode_text(
-    text,
-    *,
-    interval=0.0,
-):
-    fake_windows_text.calls.append(
-        (text, interval)
+    return (
+        fake_pyautogui,
+        unicode_calls,
     )
 
 
-fake_windows_text.type_unicode_text = (
-    fake_type_unicode_text
-)
-
-sys.modules["pyautogui"] = fake_pyautogui
-
-sys.modules[
-    "gui_agent.control.windows_text"
-] = fake_windows_text
-
-sys.modules.pop(
-    "gui_agent.control.controller",
-    None,
-)
-
-controller_module = importlib.import_module(
-    "gui_agent.control.controller"
-)
-
-Controller = controller_module.Controller
-ControlError = controller_module.ControlError
-
-
-# ---------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------
-
 @pytest.fixture
-def controller():
-    fake_pyautogui.calls.clear()
-    fake_windows_text.calls.clear()
-
-    return Controller()
+def controller(control_env):
+    return controller_module.Controller()
 
 
-# ---------------------------------------------------------
-# Initialization
-# ---------------------------------------------------------
+def test_controller_initialization(
+    controller,
+    control_env,
+):
+    fake_pyautogui, _ = control_env
 
-def test_controller_initialization(controller):
     assert controller.screen_size == (
         2560,
         1440,
@@ -159,10 +160,6 @@ def test_controller_initialization(controller):
 
     assert fake_pyautogui.FAILSAFE is True
 
-
-# ---------------------------------------------------------
-# Coordinates
-# ---------------------------------------------------------
 
 @pytest.mark.parametrize(
     ("point", "expected"),
@@ -179,7 +176,9 @@ def test_round_point(
     expected,
 ):
     assert (
-        Controller._round_point(point)
+        controller_module.Controller._round_point(
+            point
+        )
         == expected
     )
 
@@ -192,19 +191,26 @@ def test_round_point(
         (2559, 1439),
         (1280, 720),
         (0.1, 0.1),
+        (2559.4, 100),
+        (100, 1439.4),
     ],
 )
 def test_move_to_valid(
     controller,
+    control_env,
     point,
 ):
+    fake_pyautogui, _ = control_env
+
     controller.move_to(
         point,
         duration=0.25,
     )
 
-    x, y = Controller._round_point(
-        point
+    x, y = (
+        controller_module.Controller._round_point(
+            point
+        )
     )
 
     assert fake_pyautogui.calls[-1] == (
@@ -226,12 +232,39 @@ def test_move_to_valid(
         (-0.1, 1),
     ],
 )
-def test_move_to_out_of_bounds(
+def test_move_to_rejects_original_out_of_bounds(
     controller,
     point,
 ):
-    with pytest.raises(ControlError):
+    with pytest.raises(
+        controller_module.ControlError
+    ):
         controller.move_to(point)
+
+
+@pytest.mark.parametrize(
+    "point",
+    [
+        (2559.5, 100),
+        (2559.6, 100),
+        (100, 1439.5),
+        (100, 1439.6),
+    ],
+)
+def test_move_to_rejects_point_that_rounds_out_of_bounds(
+    controller,
+    control_env,
+    point,
+):
+    fake_pyautogui, _ = control_env
+
+    with pytest.raises(
+        controller_module.ControlError,
+        match="Rounded point",
+    ):
+        controller.move_to(point)
+
+    assert fake_pyautogui.calls == []
 
 
 @pytest.mark.parametrize(
@@ -253,10 +286,6 @@ def test_negative_duration_rejected(
         )
 
 
-# ---------------------------------------------------------
-# Mouse
-# ---------------------------------------------------------
-
 @pytest.mark.parametrize(
     "button",
     [
@@ -267,8 +296,11 @@ def test_negative_duration_rejected(
 )
 def test_click(
     controller,
+    control_env,
     button,
 ):
+    fake_pyautogui, _ = control_env
+
     controller.click(
         (10, 20),
         button=button,
@@ -299,8 +331,11 @@ def test_click(
 )
 def test_double_click(
     controller,
+    control_env,
     button,
 ):
+    fake_pyautogui, _ = control_env
+
     controller.double_click(
         (10, 20),
         button=button,
@@ -324,6 +359,33 @@ def test_double_click(
 
 
 @pytest.mark.parametrize(
+    "interval",
+    [
+        -0.01,
+        -1,
+    ],
+)
+def test_double_click_rejects_negative_interval_before_moving(
+    controller,
+    control_env,
+    interval,
+):
+    fake_pyautogui, _ = control_env
+
+    with pytest.raises(
+        ValueError,
+        match="interval",
+    ):
+        controller.double_click(
+            (10, 20),
+            interval=interval,
+        )
+
+    # Invalid parameters must not cause a partial mouse movement.
+    assert fake_pyautogui.calls == []
+
+
+@pytest.mark.parametrize(
     "button",
     [
         "left",
@@ -333,8 +395,11 @@ def test_double_click(
 )
 def test_drag_to(
     controller,
+    control_env,
     button,
 ):
+    fake_pyautogui, _ = control_env
+
     controller.drag_to(
         (10.4, 20.6),
         button=button,
@@ -352,9 +417,22 @@ def test_drag_to(
     ]
 
 
-# ---------------------------------------------------------
-# Text input
-# ---------------------------------------------------------
+def test_drag_to_rejects_rounding_out_of_bounds(
+    controller,
+    control_env,
+):
+    fake_pyautogui, _ = control_env
+
+    with pytest.raises(
+        controller_module.ControlError,
+        match="Rounded point",
+    ):
+        controller.drag_to(
+            (2559.6, 100),
+        )
+
+    assert fake_pyautogui.calls == []
+
 
 @pytest.mark.parametrize(
     "text",
@@ -368,25 +446,26 @@ def test_drag_to(
 )
 def test_type_ascii_uses_windows_input(
     controller,
+    control_env,
     text,
 ):
+    fake_pyautogui, unicode_calls = (
+        control_env
+    )
+
     controller.type_text(
         text,
         interval=0.03,
     )
 
-    assert fake_windows_text.calls == [
+    assert unicode_calls == [
         (
             text,
             0.03,
         )
     ]
 
-    # ASCII no longer uses pyautogui.write().
-    assert not any(
-        call[0] == "write"
-        for call in fake_pyautogui.calls
-    )
+    assert fake_pyautogui.calls == []
 
 
 @pytest.mark.parametrize(
@@ -400,11 +479,14 @@ def test_type_ascii_uses_windows_input(
 )
 def test_type_unicode_uses_windows_input(
     controller,
+    control_env,
     text,
 ):
+    _, unicode_calls = control_env
+
     controller.type_text(text)
 
-    assert fake_windows_text.calls == [
+    assert unicode_calls == [
         (
             text,
             0.02,
@@ -443,16 +525,15 @@ def test_type_text_rejects_negative_interval(
     controller,
     interval,
 ):
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError,
+        match="interval",
+    ):
         controller.type_text(
             "x",
             interval=interval,
         )
 
-
-# ---------------------------------------------------------
-# Keyboard
-# ---------------------------------------------------------
 
 @pytest.mark.parametrize(
     ("presses", "interval"),
@@ -464,9 +545,12 @@ def test_type_text_rejects_negative_interval(
 )
 def test_press(
     controller,
+    control_env,
     presses,
     interval,
 ):
+    fake_pyautogui, _ = control_env
+
     controller.press(
         "enter",
         presses=presses,
@@ -505,7 +589,10 @@ def test_press_rejects_non_positive_count(
 def test_press_rejects_negative_interval(
     controller,
 ):
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError,
+        match="interval",
+    ):
         controller.press(
             "enter",
             interval=-0.1,
@@ -522,8 +609,11 @@ def test_press_rejects_negative_interval(
 )
 def test_hotkey(
     controller,
+    control_env,
     keys,
 ):
+    fake_pyautogui, _ = control_env
+
     controller.hotkey(
         *keys,
         interval=0.25,
@@ -548,17 +638,16 @@ def test_hotkey_requires_key(
 def test_hotkey_rejects_negative_interval(
     controller,
 ):
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError,
+        match="interval",
+    ):
         controller.hotkey(
             "ctrl",
             "c",
             interval=-0.1,
         )
 
-
-# ---------------------------------------------------------
-# Scroll
-# ---------------------------------------------------------
 
 @pytest.mark.parametrize(
     "amount",
@@ -572,8 +661,11 @@ def test_hotkey_rejects_negative_interval(
 )
 def test_scroll(
     controller,
+    control_env,
     amount,
 ):
+    fake_pyautogui, _ = control_env
+
     controller.scroll(amount)
 
     assert fake_pyautogui.calls == [

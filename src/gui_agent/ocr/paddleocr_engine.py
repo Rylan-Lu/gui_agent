@@ -49,6 +49,12 @@ class PaddleOCREngine(OCREngine):
             scores = data.get("rec_scores", [])
             boxes = data.get("rec_boxes", [])
 
+            if not (len(texts) == len(scores) == len(boxes)):
+                raise RuntimeError(
+                    "PaddleOCR returned inconsistent result lengths: "
+                    f"texts={len(texts)}, scores={len(scores)}, boxes={len(boxes)}"
+                )
+
             for text, score, box in zip(texts, scores, boxes):
                 text = str(text).strip()
                 confidence = float(score)

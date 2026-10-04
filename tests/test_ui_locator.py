@@ -209,3 +209,19 @@ def test_invalid_match_mode():
 )
 def test_calculate_center(bbox, expected):
     assert UILocator._calculate_center(OCRResult("x", 1.0, bbox)) == expected
+
+def test_invalid_match_mode_with_empty_results():
+    with pytest.raises(ValueError):
+        UILocator().find_all(
+            [],
+            "x",
+            mode="contains",  # type: ignore[arg-type]
+        )
+
+def test_invalid_roi_with_empty_results():
+    with pytest.raises(ValueError):
+        UILocator().find_all(
+            [],
+            "x",
+            roi=(0, 0, 0, 10),
+        )

@@ -127,16 +127,36 @@ def test_paddle_handles_multiple_predictions():
     assert [r.text for r in engine.recognize(np.zeros((2, 2, 3), dtype=np.uint8))] == ["A", "B"]
 
 
-def test_paddle_zip_uses_shortest_sequence():
-    engine = make_paddle_engine(
+@pytest.mark.parametrize(
+    "data",
+    [
         {
             "rec_texts": ["A", "B"],
             "rec_scores": [1.0],
             "rec_boxes": [[0, 0, 1, 1], [1, 1, 2, 2]],
-        }
-    )
-    assert len(engine.recognize(np.zeros((2, 2, 3), dtype=np.uint8))) == 1
+        },
+        {
+            "rec_texts": ["A"],
+            "rec_scores": [1.0, 0.9],
+            "rec_boxes": [[0, 0, 1, 1]],
+        },
+        {
+            "rec_texts": ["A"],
+            "rec_scores": [1.0],
+            "rec_boxes": [],
+        },
+    ],
+)
+def test_paddle_rejects_inconsistent_result_lengths(data):
+    engine = make_paddle_engine(data)
 
+    with pytest.raises(
+        RuntimeError,
+        match="PaddleOCR returned inconsistent result lengths",
+    ):
+        engine.recognize(
+            np.zeros((2, 2, 3), dtype=np.uint8)
+        )
 
 @pytest.mark.parametrize("image", [None, np.zeros((10, 10)), np.zeros((10, 10, 3, 1))])
 def test_paddle_invalid_images(image):
@@ -215,3 +235,20 @@ def test_easyocr_init_uses_expected_languages_and_gpu(monkeypatch):
     monkeypatch.setitem(sys.modules, "easyocr", fake_module)
     EasyOCREngine()
     assert captured == {"languages": ["ch_sim", "en"], "gpu": True}
+
+
+def test_easyocr_init_supports_cpu_mode(monkeypatch):
+    captured = {}
+    fake_module = types.ModuleType("easyocr")
+
+    class Reader:
+        def __init__(self, languages, gpu):
+            captured["languages"] = languages
+            captured["gpu"] = gpu
+
+    fake_module.Reader = Reader
+    monkeypatch.setitem(sys.modules, "easyocr", fake_module)
+
+    EasyOCREngine(gpu=False)
+
+    assert captured == {"languages": ["ch_sim", "en"], "gpu": False}
