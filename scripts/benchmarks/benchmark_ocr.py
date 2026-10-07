@@ -8,7 +8,7 @@ from gui_agent.ocr.base import OCREngine
 from gui_agent.ocr.easyocr_engine import EasyOCREngine
 from gui_agent.ocr.paddleocr_engine import PaddleOCREngine
 
-DEFAULT_IMAGE = Path(__file__).resolve().parent / "outputs" / "ocr_benchmark.png"
+DEFAULT_IMAGE = Path(__file__).resolve().parents[2] / "artifacts" / "ocr" / "ocr_benchmark.png"
 
 
 def create_engine(name: str) -> OCREngine:

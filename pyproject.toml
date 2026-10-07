@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "gui-agent"
 version = "0.1.0"
-description = "Desktop GUI agent with screen perception, OCR, UI localization, and control"
+description = "Multimodal desktop GUI agent with perception, planning, grounding, execution, and feedback"
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
 dependencies = [
@@ -32,7 +32,10 @@ local-vlm = [
     "huggingface-hub>=1.30,<2",
 ]
 
-dev = ["pytest>=8,<10"]
+dev = [
+    "pytest>=8,<10",
+    "pytest-cov>=5,<8",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -40,3 +43,4 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+addopts = "-ra"

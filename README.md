@@ -1,130 +1,185 @@
 # GUI Agent
 
-A desktop GUI agent project developed from scratch.
+A modular Windows desktop GUI agent built around screen perception, OCR/VLM understanding, task planning, grounding, desktop execution, feedback, and success judging.
 
-## Status
+## Current status
 
-# Development Progress
+The repository contains the Week 1–4 GUI Agent v1 baseline.
 
-## Week 1 — Research and Project Initialization
+Implemented capabilities include:
 
-**Status: Completed**
+- MSS full-screen and region capture.
+- PaddleOCR primary OCR backend and EasyOCR fallback/debug backend.
+- Exact/fuzzy text localization and coordinate mapping.
+- Mouse, keyboard, scrolling, dragging, hotkeys, and IME-safe Unicode text input.
+- Local Qwen3-VL and OpenAI-compatible remote model adapters.
+- GUI dataset adapters for ScreenAgent, Mind2Web, and WebArena.
+- Planner → `TaskPlan` / `PlanStep` structured planning.
+- Agent runtime, grounding, execution, screen-change feedback, and success judging.
+- Real desktop E2E scripts and a five-task Week 4 baseline suite.
 
-### Technical Research
+The current implementation is a working engineering baseline, not a finished production agent. Retry/recovery/replan, non-text visual grounding, broader task evaluation, and systematic performance profiling remain active development areas.
 
-Investigated three representative GUI Agent approaches:
+## Runtime architecture
 
-- UI-TARS: native GUI models and unified action representations.
-- Claude Computer Use: computer tools and the Agent Loop.
-- ScreenAgent: Planning, Action, and Reflection.
+```text
+User Task
+   ↓
+Planner
+   ↓
+TaskPlan / PlanStep
+   ↓
+AgentLoop
+   ↓
+GUIAction
+   ↓
+Grounding (OCR + UILocator + CoordinateMapper)
+   ↓
+ActionRunner → ActionExecutor → Controller
+   ↓
+Desktop
+   ↓
+Observation
+   ├─ ActionFeedback
+   └─ Success Judge
+   ↓
+Next / Finish / Fail
+```
 
-Studied the core concepts of LLMs, VLMs, Tool Calling, ReAct,
-Visual Grounding, Planning, and Agent execution loops.
+## Repository layout
 
-Selected a modular architecture for the initial implementation:
+```text
+gui_agent/
+├── src/gui_agent/           # Product/runtime code
+│   ├── agent/               # Planner, runtime loop, execution bridge, feedback/judge
+│   ├── control/             # Mouse/keyboard and Windows Unicode input
+│   ├── datasets/            # ScreenAgent / Mind2Web / WebArena adapters
+│   ├── locator/             # Text localization and coordinate mapping
+│   ├── models/              # Local VLM and remote API model clients
+│   ├── ocr/                 # OCR interfaces/backends
+│   ├── perception/          # Screen capture
+│   └── runtime/             # GPU runtime initialization
+├── tests/                   # Fast automated pytest suite
+├── scripts/
+│   ├── benchmarks/          # Performance experiments
+│   ├── datasets/            # Dataset export/audit/preprocessing
+│   ├── diagnostics/         # Real model/API/GPU checks
+│   └── e2e/                 # Real desktop end-to-end runs
+├── docs/
+│   ├── architecture/        # Architecture and structure notes
+│   ├── guides/              # Usage/runbooks
+│   └── reports/             # Historical development reports
+├── artifacts/               # Generated runtime outputs; ignored by Git
+├── data/                    # Local datasets; ignored by Git
+├── pyproject.toml
+├── environment-stable.yml
+└── requirements-stable.txt
+```
 
-Perception → Grounding → Planning → Action → Feedback
+See [`docs/architecture/project_structure.md`](docs/architecture/project_structure.md) for module responsibilities and dependency flow.
 
-### Environment and Project Setup
+## Environment
 
-- Initialized the Git repository and Python project structure.
-- Configured Windows, Conda, Python 3.11, and NVIDIA GPU support.
-- Verified PyTorch CUDA availability.
-- Implemented initial desktop screenshot experiments using MSS.
-- Verified local Qwen3-VL screenshot understanding.
+Validated development baseline:
 
-### Deliverables
+- Windows 11
+- Python 3.11.15
+- NVIDIA GPU environment
+- PyTorch + PaddleOCR GPU coexistence using **Torch-first initialization**
 
-- Technical research report.
-- Initial project architecture and development environment.
-- Basic screenshot and VLM inference experiments.
+Important runtime constraints:
 
----
+1. Initialize PyTorch CUDA/cuDNN before importing Paddle/PaddleOCR in GPU workflows.
+2. PaddleOCR is intentionally lazy-imported.
+3. Do not apply an additional `1 / 1.25` coordinate correction on the validated Windows 125% DPI setup; MSS and PyAutoGUI were verified in the same coordinate space.
+4. API keys must remain in environment variables and must not be committed.
+5. Avoid logging complete full-screen OCR output because desktop screenshots may contain sensitive information.
 
-## Week 2 — Desktop Perception and Control
+The frozen environment files are historical snapshots. The Paddle GPU setup also depends on a validated Windows-specific wheel/cuDNN arrangement; see the project handoff/environment notes before rebuilding the GPU stack.
 
-**Status: Completed**
+## Install for development
 
-### Screen Capture
+From the repository root:
 
-- Implemented full-screen and region capture using MSS.
-- Standardized screenshot output as BGR NumPy arrays.
-- Added image-size and region-boundary validation.
-- Verified coordinate alignment between MSS and PyAutoGUI.
+```powershell
+conda activate gui-agent
+python -m pip install -e ".[dev]"
+python -m pip check
+```
 
-### OCR
+Optional capabilities are installed separately from `pyproject.toml`, for example:
 
-- Implemented a unified OCR interface and result structure.
-- Integrated EasyOCR and PaddleOCR.
-- Added text, confidence, and bounding-box extraction.
-- Implemented OCR result visualization.
-- Selected PaddleOCR GPU as the primary OCR backend.
-- Retained EasyOCR as a fallback.
+```powershell
+python -m pip install -e ".[paddleocr]"
+python -m pip install -e ".[easyocr]"
+python -m pip install -e ".[agent]"
+python -m pip install -e ".[local-vlm]"
+```
 
-### UI Localization
+For the already validated GPU environment, prefer the existing stable environment over casually reinstalling Torch/Paddle packages.
 
-- Implemented exact and fuzzy text matching.
-- Added confidence filtering and ROI support.
-- Added missing-target and ambiguous-target handling.
-- Converted OCR bounding boxes into target center coordinates.
+## Automated tests
 
-### Coordinate Mapping and Control
+```powershell
+python -m pytest -q
+```
 
-- Implemented image-to-desktop coordinate mapping.
-- Supported region offsets and different scaling factors.
-- Implemented mouse movement, clicking, double-clicking,
-  dragging, scrolling, key presses, and hotkeys.
-- Implemented Windows Unicode text input using SendInput.
+The historical Week 4 full-regression checkpoint reached **427 passed**. Additional Success Judge coverage was added afterward, so establish the current baseline from an actual fresh `pytest` run rather than assuming the historical count.
 
-### Integration
+`tests/` is reserved for automated unit/integration tests that should not manipulate the real desktop. Real desktop/API/GPU checks live under `scripts/`.
 
-Verified the complete desktop interaction pipeline:
+## Real desktop checks
 
-ScreenCapture
-    ↓
-PaddleOCR
-    ↓
-UILocator
-    ↓
-CoordinateMapper
-    ↓
-Controller
+Real scripts can move the mouse, type text, open applications, call APIs, or load large GPU models. Run them deliberately.
 
-The end-to-end test successfully performed target recognition,
-coordinate mapping, mouse clicking, and Chinese/English text input.
+Examples:
 
-### Testing and Results
+```powershell
+python scripts/e2e/test_week4_real_e2e.py
+python scripts/e2e/week4_task_suite.py
+python scripts/diagnostics/test_gpu_coexistence.py
+```
 
-- 32/32 Week 2 acceptance checks passed.
-- Expanded the stable baseline to 253 automated tests.
-- Verified full desktop end-to-end interaction.
-- Verified Torch and PaddleOCR GPU coexistence under the
-  required initialization order.
+See [`scripts/README.md`](scripts/README.md) for the full classification.
 
-OCR benchmark on the same test screenshot:
+## Performance baseline
 
-| OCR Backend | Detections | Inference Time |
-|---|---:|---:|
-| EasyOCR GPU | 208 | 4.170 s |
-| PaddleOCR CPU | 202 | 32.560 s |
-| PaddleOCR GPU | 202 | 1.919–1.971 s |
+Historical stage measurements include:
 
-These measurements describe one test screenshot and hardware
-configuration, not a general benchmark across datasets.
+| Component | Recorded result | Scope |
+|---|---:|---|
+| PaddleOCR GPU | ~1.919–1.971 s / image | Same desktop screenshot |
+| EasyOCR GPU | ~4.170 s / image | Same desktop screenshot |
+| Local Qwen3-VL load | ~5.28 s | Small number of runs |
+| Local Qwen3-VL inference | ~2–3 s | Input/output length dependent |
+| Remote multimodal API | ~1.66–1.7 s | Single-request reference |
+| Planner E2E | ~12.16 s | Instruction + screenshot → VLM → JSON → TaskPlan |
 
-### Known Limitations
+These are engineering observations, not a standardized benchmark. Future performance reports should keep raw timing and report at least Mean, P95, and Std under controlled warm-up/device conditions.
 
-- Primary validation targets a single Windows display.
-- OCR text bounding boxes do not always represent complete UI controls.
-- Torch and PaddleOCR GPU coexistence depends on initialization order
-  and a manually configured cuDNN environment.
-- General-purpose VLM grounding and autonomous action feedback are
-  not yet integrated into the stable execution pipeline.
+## Current limitations
 
-### Deliverables
+- OCR grounding mainly handles visible text controls.
+- Icon-only and other non-text controls need UIA/VLM or hybrid grounding.
+- Pixel-change feedback indicates that the screen changed, not that the task succeeded.
+- Success Judge is still primarily OCR/text based.
+- AgentLoop currently executes a precomputed plan and lacks robust retry/recovery/replan.
+- Real-task sample size is too small for a stable success-rate claim.
+- PaddleOCR startup and repeated observation/OCR introduce significant latency.
+- The project does not yet expose a polished end-user CLI/application entry point.
 
-- Desktop perception and control modules.
-- OCR benchmarking scripts.
-- End-to-end integration test.
-- Week 2 test report.
-- Stable environment snapshots.
+## Recommended next development priorities
+
+1. Re-run the complete automated baseline and record the exact current result.
+2. Establish a formal evaluation protocol: Auto Judge + Human Review + failure taxonomy.
+3. Expand the real task suite beyond the initial five tasks.
+4. Standardize module/task performance benchmarks and raw timing output.
+5. Add retry/recovery/replan policies.
+6. Add hybrid grounding for icons and non-text controls.
+
+## Documentation
+
+- [Project structure and architecture](docs/architecture/project_structure.md)
+- [Code review and improvement backlog](docs/architecture/code_review.md)
+- [GUI Agent v1 usage guide](docs/guides/week4_v1_usage.md)
+- [Week 4 v1 report](docs/reports/week4_v1_report.md)

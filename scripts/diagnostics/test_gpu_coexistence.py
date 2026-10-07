@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 from gui_agent.ocr.paddleocr_engine import PaddleOCREngine
 
-IMAGE_PATH = Path(__file__).resolve().parent / "outputs" / "ocr_benchmark.png"
+IMAGE_PATH = Path(__file__).resolve().parents[2] / "artifacts" / "ocr" / "ocr_benchmark.png"
 
 
 def torch_cudnn_test(label: str) -> None:
@@ -20,7 +20,7 @@ def main() -> None:
     if not IMAGE_PATH.exists():
         raise FileNotFoundError(
             f"Benchmark image not found: {IMAGE_PATH}. "
-            "Run scripts/save_ocr_benchmark.py first."
+            "Run scripts/benchmarks/save_ocr_benchmark.py first."
         )
 
     print("=== 1. Torch cuDNN before PaddleOCR ===")

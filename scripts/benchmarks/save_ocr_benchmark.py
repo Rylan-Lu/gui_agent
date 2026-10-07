@@ -4,7 +4,7 @@ import cv2
 
 from gui_agent.perception.screen_capture import ScreenCapture
 
-OUTPUT_PATH = Path(__file__).resolve().parent / "outputs" / "ocr_benchmark.png"
+OUTPUT_PATH = Path(__file__).resolve().parents[2] / "artifacts" / "ocr" / "ocr_benchmark.png"
 
 
 def main() -> None:
