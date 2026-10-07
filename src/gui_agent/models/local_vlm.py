@@ -15,15 +15,21 @@ class LocalVLMClient:
     """Local Qwen3-VL model adapter."""
 
     def __init__(
-        self,
-        model_id: str = "Qwen/Qwen3-VL-2B-Instruct",
-        max_new_tokens: int = 128,
+            self,
+            model_id: str = "Qwen/Qwen3-VL-2B-Instruct",
+            max_new_tokens: int = 128,
+            adapter_path: str | Path | None = None,
     ):
         if max_new_tokens <= 0:
             raise ValueError("max_new_tokens must be positive")
 
         self.model_id = model_id
         self.max_new_tokens = max_new_tokens
+        self.adapter_path = (
+            Path(adapter_path)
+            if adapter_path is not None
+            else None
+        )
 
         self.model = None
         self.processor = None
@@ -56,6 +62,20 @@ class LocalVLMClient:
             attn_implementation="sdpa",
             local_files_only=True,
         )
+
+        if self.adapter_path is not None:
+            if not self.adapter_path.is_dir():
+                raise FileNotFoundError(
+                    self.adapter_path
+                )
+
+            from peft import PeftModel
+
+            model = PeftModel.from_pretrained(
+                model,
+                str(self.adapter_path),
+                is_trainable=False,
+            )
 
         model.eval()
 
