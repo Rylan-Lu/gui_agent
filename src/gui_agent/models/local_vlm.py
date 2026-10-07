@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import gc
+import sys
 from pathlib import Path
 
 from gui_agent.models.base import (
@@ -59,6 +61,32 @@ class LocalVLMClient:
 
         self.processor = processor
         self.model = model
+
+    def unload(self) -> None:
+        """
+        Release local planner resources after one-shot planning.
+
+        The unified desktop path uses the GPU again for PaddleOCR. Keeping
+        several GiB of Qwen weights resident after planning can leave too
+        little room for Paddle/cuBLAS workspaces. The client remains reusable:
+        a later generate() call will load the model again.
+        """
+
+        if self.model is None and self.processor is None:
+            return
+
+        torch = sys.modules.get("torch")
+        cuda = getattr(torch, "cuda", None) if torch is not None else None
+
+        if cuda is not None and cuda.is_available():
+            cuda.synchronize()
+
+        self.model = None
+        self.processor = None
+        gc.collect()
+
+        if cuda is not None and cuda.is_available():
+            cuda.empty_cache()
 
     @staticmethod
     def _build_messages(request: ModelRequest) -> list[dict]:
