@@ -19,6 +19,11 @@ from gui_agent.datasets.schema import (
     ActionType,
     GUIAction,
 )
+from gui_agent.agent.failure_policy import (
+    FailureDecision,
+    FailurePhase,
+    decide_recovery,
+)
 
 
 @dataclass(frozen=True)
@@ -109,127 +114,113 @@ class ActionTransaction:
             else RetryPolicy()
         )
 
+        self.last_failure: FailureDecision | None = None
+
     def execute(
-        self,
-        action: GUIAction,
+            self,
+            action: GUIAction,
     ) -> ActionTransactionResult:
-        """
-        Execute one GUI action transaction.
+        self.last_failure = None
+        phase = FailurePhase.PREFLIGHT
 
-        Safe retry is intentionally limited to:
+        try:
+            requirements = self.runner.preflight(action)
+            grounding_attempts = 0
 
-            unresolved groundable action
-                ->
-            fresh OCR observation
-                ->
-            GroundingTargetNotFoundError
-                ->
-            wait
-                ->
-            fresh OCR observation
-
-        Once ActionExecutor is reached, the action is never
-        automatically retried here because desktop side effects
-        may already have occurred.
-        """
-
-        requirements = (
-            self.runner.preflight(
-                action
-            )
-        )
-
-        grounding_attempts = 0
-
-        if requirements.needs_ocr:
-            max_attempts = (
-                self.retry_policy
-                .max_grounding_attempts
-            )
-
-            for attempt in range(
-                1,
-                max_attempts + 1,
-            ):
-                grounding_attempts = (
-                    attempt
+            if requirements.needs_ocr:
+                max_attempts = (
+                    self.retry_policy.max_grounding_attempts
                 )
 
-                # Each retry must use a fresh observation.
-                before = (
-                    self.environment.observe(
+                for attempt in range(
+                        1, max_attempts + 1
+                ):
+                    grounding_attempts = attempt
+
+                    phase = FailurePhase.OBSERVATION
+                    before = self.environment.observe(
                         use_ocr=True
                     )
-                )
 
-                try:
-                    resolved_action = (
-                        self.runner.run(
-                            action,
-                            before,
+                    # run() includes both Grounding and
+                    # execution. Non-grounding errors are
+                    # conservatively treated as possibly
+                    # occurring after dispatch.
+                    phase = FailurePhase.ACTION_EXECUTION
+
+                    try:
+                        resolved_action = self.runner.run(
+                            action, before
                         )
-                    )
+                        break
 
-                    break
 
-                except GroundingTargetNotFoundError:
-                    if attempt >= max_attempts:
-                        raise
+                    except GroundingTargetNotFoundError:
 
-                    delay = (
-                        self.retry_policy
-                        .grounding_retry_delay_s
-                    )
+                        phase = FailurePhase.GROUNDING
 
-                    if delay > 0:
-                        time.sleep(
-                            delay
+                        if attempt >= max_attempts:
+                            raise
+
+                        phase = FailurePhase.GROUNDING
+                        delay = (
+                            self.retry_policy
+                            .grounding_retry_delay_s
                         )
 
-        else:
-            before = (
-                self.environment.observe(
+                        if delay > 0:
+                            time.sleep(delay)
+
+            else:
+                phase = FailurePhase.OBSERVATION
+                before = self.environment.observe(
                     use_ocr=False
                 )
-            )
 
-            resolved_action = (
-                self.runner.run(
-                    action,
-                    before,
+                phase = FailurePhase.ACTION_EXECUTION
+                resolved_action = self.runner.run(
+                    action, before
                 )
-            )
 
-        # WAIT already performs its own explicit delay.
-        if (
-            resolved_action.action_type
-            != ActionType.WAIT
-            and self.settle_seconds > 0
-        ):
-            time.sleep(
-                self.settle_seconds
-            )
+            # The executor has returned successfully.
+            # Subsequent failures must not trigger
+            # another desktop action.
+            phase = FailurePhase.POST_ACTION
 
-        # Feedback only needs the screenshot at this stage.
-        after = (
-            self.environment.observe(
+            if (
+                    resolved_action.action_type
+                    != ActionType.WAIT
+                    and self.settle_seconds > 0
+            ):
+                time.sleep(self.settle_seconds)
+
+            after = self.environment.observe(
                 use_ocr=False
             )
-        )
 
-        feedback_result = (
-            self.feedback.compare(
-                before,
-                after,
+            feedback_result = self.feedback.compare(
+                before, after
             )
-        )
 
-        return ActionTransactionResult(
-            action=resolved_action,
-            before=before,
-            after=after,
-            feedback=feedback_result,
-            grounding_attempts=(
-                grounding_attempts
-            ),
-        )
+            return ActionTransactionResult(
+                action=resolved_action,
+                before=before,
+                after=after,
+                feedback=feedback_result,
+                grounding_attempts=grounding_attempts,
+            )
+
+
+
+        except Exception as exc:
+
+            self.last_failure = decide_recovery(
+
+                exc,
+
+                phase=phase,
+
+            )
+
+            raise
+

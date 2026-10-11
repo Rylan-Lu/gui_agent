@@ -520,3 +520,55 @@ def test_execution_error_is_preserved():
                 metadata={},
             ),
         )
+
+
+from unittest.mock import Mock
+
+import pytest
+
+from gui_agent.agent.action_runner import (
+    ActionRunner,
+    ActionDispatchError,
+)
+from gui_agent.agent.grounding import (
+    GroundingTargetNotFoundError,
+)
+from gui_agent.datasets.schema import (
+    ActionType,
+    GUIAction,
+)
+
+
+def test_executor_grounding_error_is_not_safe_to_retry():
+    executor = Mock()
+
+    executor.execute.side_effect = (
+        GroundingTargetNotFoundError(
+            "unexpected executor failure"
+        )
+    )
+
+    runner = ActionRunner(
+        executor=executor
+    )
+
+    action = GUIAction(
+        action_type=ActionType.TYPE_TEXT,
+        text="hello"
+    )
+
+    # A non-groundable action does not consume
+    # observation data in ActionRunner.run().
+    observation = Mock()
+
+    with pytest.raises(
+        ActionDispatchError,
+        match="automatic retry is unsafe",
+    ):
+        runner.run(
+            action,
+            observation,
+        )
+
+    # The executor was invoked exactly once.
+    executor.execute.assert_called_once()

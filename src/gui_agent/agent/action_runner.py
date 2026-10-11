@@ -10,6 +10,7 @@ from gui_agent.agent.executor import ActionExecutor
 from gui_agent.agent.grounding import (
     GROUNDABLE_ACTION_TYPES,
     GroundingBridge,
+    GroundingTargetNotFoundError,
 )
 from gui_agent.agent.observation import Observation
 from gui_agent.datasets.schema import GUIAction
@@ -17,6 +18,17 @@ from gui_agent.datasets.schema import GUIAction
 
 class ActionRunnerError(RuntimeError):
     pass
+
+
+class ActionDispatchError(ActionRunnerError):
+    """
+    The executor has already been invoked.
+
+    Desktop side effects may have occurred.
+    Automatic action retry is unsafe.
+    """
+    pass
+
 
 
 @dataclass(frozen=True)
@@ -168,8 +180,20 @@ class ActionRunner:
         #   execution failure
         #
         # from ActionRunner's own observation-contract failures.
-        self.executor.execute(
-            resolved_action
-        )
+
+        # Once execution starts, desktop side effects
+        # may already have occurred.
+        try:
+            self.executor.execute(
+                resolved_action
+            )
+
+        except GroundingTargetNotFoundError as exc:
+            # Do not allow an executor-originated error
+            # to trigger the pre-execution Grounding retry.
+            raise ActionDispatchError(
+                "executor failed after dispatch began; "
+                "automatic retry is unsafe"
+            ) from exc
 
         return resolved_action
